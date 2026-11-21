@@ -1,0 +1,402 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  font-family: 'Inter', sans-serif;
+  color: #f5eee5;
+  background: #08090d;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse at 50% 0%, #30200f 0%, transparent 45%),
+    #08090d;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.topbar {
+  height: 82px;
+  padding: 0 6%;
+  border-bottom: 1px solid #282019;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(8, 9, 13, 0.9);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.brand-icon {
+  color: #e9a53d;
+  font-size: 36px;
+}
+
+.brand h1 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 17px;
+  letter-spacing: 2px;
+}
+
+.brand h1 span {
+  color: #e9a53d;
+}
+
+.brand p,
+.eyebrow,
+.panel-header p {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: #918577;
+  margin-top: 5px;
+}
+
+.system-status {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px;
+  color: #b5c6ac;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  background: #7dd58b;
+  border-radius: 50%;
+  box-shadow: 0 0 12px #7dd58b;
+}
+
+.dashboard {
+  max-width: 1400px;
+  margin: auto;
+  padding: 55px 6% 25px;
+}
+
+.intro {
+  margin-bottom: 35px;
+}
+
+.eyebrow {
+  color: #dba04a;
+  margin-bottom: 15px;
+}
+
+.intro h2 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(27px, 4vw, 43px);
+}
+
+.intro h2 span {
+  color: #e9a53d;
+  text-shadow: 0 0 24px #a65b1c;
+}
+
+.description {
+  color: #918b83;
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 22px;
+}
+
+.camera-panel,
+.info-card {
+  background: #111116;
+  border: 1px solid #34291e;
+  border-radius: 12px;
+}
+
+.camera-panel {
+  padding: 20px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.panel-header h3 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+
+.status-label {
+  font-size: 10px;
+  color: #e19b55;
+  border: 1px solid #674020;
+  border-radius: 5px;
+  padding: 7px 10px;
+}
+
+.status-label.online {
+  color: #80d99b;
+  border-color: #376844;
+}
+
+.camera-screen {
+  height: 430px;
+  position: relative;
+  overflow: hidden;
+  background: #050507;
+  border: 1px solid #38291b;
+  border-radius: 8px;
+}
+
+#camera-feed {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
+  background:
+    radial-gradient(circle, #25190f 0%, #09090d 65%);
+}
+
+.camera-symbol {
+  color: #e5a33d;
+  font-size: 60px;
+  margin-bottom: 18px;
+  text-shadow: 0 0 25px #c47b27;
+}
+
+.placeholder h3 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 14px;
+}
+
+.placeholder p {
+  color: #8d8277;
+  font-size: 12px;
+  margin-top: 10px;
+}
+
+.camera-overlay {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  justify-content: space-between;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 9px;
+  color: #f2b65c;
+  pointer-events: none;
+}
+
+.camera-controls {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.primary-btn,
+.secondary-btn {
+  padding: 13px 18px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.primary-btn {
+  background: linear-gradient(110deg, #a85b1c, #e8a33e);
+  color: #100b05;
+  border: none;
+}
+
+.secondary-btn {
+  color: #d9c7b0;
+  background: #201b17;
+  border: 1px solid #59412b;
+}
+
+.camera-message {
+  color: #8c8176;
+  font-size: 11px;
+  margin-top: 15px;
+}
+
+.info-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.info-card {
+  padding: 20px;
+}
+
+.card-label {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: #ad8754;
+  margin-bottom: 14px;
+}
+
+.info-card h2 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 22px;
+}
+
+.info-card h2 span {
+  color: #776b60;
+  font-size: 13px;
+}
+
+.info-card p:not(.card-label) {
+  color: #8b837b;
+  font-size: 11px;
+  margin-top: 8px;
+}
+
+.pending {
+  color: #e2a34b;
+  font-size: 17px !important;
+}
+
+.module-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 11px;
+  color: #a69b8f;
+}
+
+.module-list li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.module-dot {
+  width: 7px;
+  height: 7px;
+  background: #524b45;
+  border-radius: 50%;
+}
+
+.module-dot.active {
+  background: #e5a33d;
+  box-shadow: 0 0 10px #e5a33d;
+}
+
+.module-active {
+  color: #e9b35c;
+}
+
+footer {
+  text-align: center;
+  color: #625b54;
+  font-size: 9px;
+  letter-spacing: 2px;
+  margin-top: 45px;
+}
+
+footer span {
+  color: #d99838;
+  padding: 0 8px;
+}
+
+@media (max-width: 850px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .info-panel {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 550px) {
+  .topbar {
+    padding: 0 5%;
+  }
+
+  .brand h1 {
+    font-size: 13px;
+  }
+
+  .system-status {
+    font-size: 8px;
+  }
+
+  .dashboard {
+    padding: 35px 5%;
+  }
+
+  .camera-screen {
+    height: 300px;
+  }
+
+  .camera-controls {
+    flex-wrap: wrap;
+  }
+
+  .info-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* Hand tracking overlay */
+#camera-feed {
+  position: relative;
+  z-index: 1;
+  display: block;
+}
+
+#hand-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.camera-overlay {
+  z-index: 3;
+}
