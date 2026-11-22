@@ -991,5 +991,4 @@ export function createObjectFactory(renderer, glowTexture) {
     createCore,
     dispose
   };
-} 
-// hello
+}

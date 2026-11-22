@@ -242,6 +242,18 @@ function handleGestureEvent(event) {
         (event.hands > 1 ? ' (both hands)' : '');
       break;
 
+    case 'CIRCLE_START':
+      lastEventText = 'Draw a circle with two fingers...';
+      break;
+
+    case 'CIRCLE_COMPLETE':
+      lastEventText = event.anchor ? 'MANDALA SHIELD OPENED' : 'PORTAL OPENED';
+      break;
+
+    case 'CIRCLE_CANCEL':
+      lastEventText = 'Circle not completed';
+      break;
+
     case 'GRAB_START':
       lastEventText = 'Object grab';
       break;
@@ -437,7 +449,11 @@ async function startCamera() {
 
         let gestureText = getGestureName(state);
 
-        if (state === 'CHARGING' || state === 'RELEASE') {
+        if (
+          state === 'CHARGING' ||
+          state === 'RELEASE' ||
+          state === 'SPELL_DRAW'
+        ) {
           gestureText += ` ${Math.round(frame.ui.energy * 100)}%`;
         }
 

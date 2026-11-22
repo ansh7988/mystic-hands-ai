@@ -6,6 +6,7 @@ import {
 import { drawMagicEffect } from './magicEngine.js';
 import { createTelekinesisEngine } from './telekinesis.js';
 import { createGestureTracker } from './gestureEngine.js';
+import { createCircleDetector } from './circleDetector.js';
 
 // ==========================================
 // HAND CONNECTIONS
@@ -151,6 +152,7 @@ export async function startHandTracking(
 
   const aspect = video.videoWidth / video.videoHeight;
   const gestureTracker = createGestureTracker();
+  const circleDetector = createCircleDetector();
   const onGestureEvent = options.onGestureEvent || null;
 
   // ========================================
@@ -300,6 +302,31 @@ export async function startHandTracking(
           aspect
         );
 
+        // ==================================
+        // SLING-RING CIRCLE (two fingers)
+        // ==================================
+
+        const circleFrame = circleDetector.update(
+          gestureFrame.hands,
+          currentTime,
+          aspect
+        );
+
+        gestureFrame.events.push(...circleFrame.events);
+        gestureFrame.circles = circleFrame;
+
+        const busy = ['CHARGING', 'RELEASE', 'GRAB'];
+
+        if (!busy.includes(gestureFrame.ui.gesture)) {
+
+          if (circleFrame.portalRecent) {
+            gestureFrame.ui.gesture = 'PORTAL';
+          } else if (circleFrame.drawing) {
+            gestureFrame.ui.gesture = 'SPELL_DRAW';
+            gestureFrame.ui.energy = circleFrame.progress;
+          }
+        }
+
         if (onGestureEvent) {
           for (const event of gestureFrame.events) {
             onGestureEvent(event);
@@ -358,6 +385,7 @@ export async function startHandTracking(
     );
 
     gestureTracker.reset();
+    circleDetector.reset();
 
     // Dispose 3D engine
     telekinesis.dispose();

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createMagicEffects } from './magicEffects.js';
+import { createObjectFactory } from './objectFactory.js';
 
 // ================================================
 // MYSTIC HANDS AI - TELEKINESIS
@@ -8,9 +9,10 @@ import { createMagicEffects } from './magicEffects.js';
 //   PINCH  (GRAB_START / GRAB_END)  -> grab, carry, throw
 //   FIST   (CHARGING)               -> objects are pulled into orbit
 //   OPEN   (RELEASE event)          -> radial explosion impulse
+//   TWO FINGERS drawing a circle    -> glowing trail + sparks, then a portal
+//   OPEN PALM + other hand's circle -> mandala shield with a fan of rays
 //
-// Visual models are still the Milestone 1 placeholders; they are replaced
-// in Milestone 3. Interaction and effects here are final-quality first passes.
+// Object visuals (rocks, crystals, cores) come from objectFactory.js.
 // ================================================
 
 const TUNING = {
@@ -32,7 +34,23 @@ const TUNING = {
   releaseBase: 380,
   releaseEnergy: 1500,
 
-  maxSpeed: 1600
+  maxSpeed: 1600,
+
+  // Sling-ring portal
+  portalPull: 520,          // how strongly an open portal draws objects in
+  portalSwirl: 260,
+  portalEjectSpeed: 650,    // objects reaching the centre are flung back out
+  portalMinRadius: 110,
+  portalMaxRadius: 300,
+
+  // Two-handed mandala shield
+  mandalaAnchor: 'palm',    // 'palm' = follows the open palm, 'circle' = stays where drawn
+  mandalaMinRadius: 150,
+  mandalaMaxRadius: 290,
+  mandalaLostMs: 500,       // palm may flicker this long before the mandala closes
+
+  // Subtle fire around energy cores (0 = off)
+  coreFlamePower: 0.28
 };
 
 export function createTelekinesisEngine(container, width, height) {
@@ -93,12 +111,12 @@ export function createTelekinesisEngine(container, width, height) {
   scene.add(new THREE.HemisphereLight(
     0xffd8a0,
     0x16101d,
-    2.0
+    1.1
   ));
 
   const ambient = new THREE.AmbientLight(
     0xffffff,
-    0.65
+    0.35
   );
 
   scene.add(ambient);
@@ -240,255 +258,23 @@ export function createTelekinesisEngine(container, width, height) {
   scene.add(shadowFloor);
 
   // ==============================================
-  // ROCK GEOMETRY  (placeholder until Milestone 3)
+  // OBJECT FACTORY (Milestone 3 visuals)
   // ==============================================
 
-  function createRockGeometry(radius) {
-
-    const geometry = new THREE.IcosahedronGeometry(
-      radius,
-      2
-    );
-
-    const positions = geometry.attributes.position;
-
-    for (let i = 0; i < positions.count; i++) {
-
-      const x = positions.getX(i);
-      const y = positions.getY(i);
-      const z = positions.getZ(i);
-
-      const noise =
-        0.82 + Math.random() * 0.36;
-
-      positions.setXYZ(
-        i,
-        x * noise,
-        y * noise,
-        z * noise
-      );
-    }
-
-    positions.needsUpdate = true;
-
-    geometry.computeVertexNormals();
-
-    return geometry;
-  }
-
-  // ==============================================
-  // CRYSTAL GEOMETRY  (placeholder until Milestone 3)
-  // ==============================================
-
-  function createCrystalGeometry(radius) {
-
-    const geometry = new THREE.OctahedronGeometry(
-      radius,
-      0
-    );
-
-    geometry.scale(
-      0.85,
-      1.5,
-      0.85
-    );
-
-    return geometry;
-  }
-
-  // ==============================================
-  // OBJECT FACTORY  (placeholder visuals until Milestone 3)
-  // ==============================================
+  const factory = createObjectFactory(renderer, glowTexture);
 
   const objects = [];
 
   function createEnergyObject(type, x, y, radius) {
 
-    const group = new THREE.Group();
+    const visual = type === 'rock'
+      ? factory.createRock(radius)
+      : type === 'crystal'
+        ? factory.createCrystal(radius)
+        : factory.createCore(radius);
 
-    let mainMesh;
+    const group = visual.group;
 
-    // ---------------- ROCK ----------------
-
-    if (type === 'rock') {
-
-      const material = new THREE.MeshStandardMaterial({
-        color: 0x38312e,
-        roughness: 0.88,
-        metalness: 0.15,
-        emissive: 0x421400,
-        emissiveIntensity: 0.5,
-        flatShading: true
-      });
-
-      mainMesh = new THREE.Mesh(
-        createRockGeometry(radius),
-        material
-      );
-
-      mainMesh.castShadow = true;
-      mainMesh.receiveShadow = true;
-
-      group.add(mainMesh);
-
-      // Glowing lava cracks
-      const edges = new THREE.EdgesGeometry(
-        mainMesh.geometry,
-        35
-      );
-
-      const crackLines = new THREE.LineSegments(
-        edges,
-        new THREE.LineBasicMaterial({
-          color: 0xff651b,
-          transparent: true,
-          opacity: 0.65
-        })
-      );
-
-      group.add(crackLines);
-
-      // Small debris pieces
-      for (let i = 0; i < 3; i++) {
-
-        const debris = new THREE.Mesh(
-          new THREE.TetrahedronGeometry(radius * 0.18),
-          new THREE.MeshStandardMaterial({
-            color: 0x4c3020,
-            emissive: 0x7c2400,
-            emissiveIntensity: 0.5
-          })
-        );
-
-        debris.position.set(
-          (Math.random() - 0.5) * radius * 1.5,
-          (Math.random() - 0.5) * radius * 1.5,
-          (Math.random() - 0.5) * radius * 0.8
-        );
-
-        debris.castShadow = true;
-
-        group.add(debris);
-      }
-    }
-
-    // ---------------- CRYSTAL ----------------
-
-    if (type === 'crystal') {
-
-      const material = new THREE.MeshPhysicalMaterial({
-        color: 0x9e4b19,
-        emissive: 0x622000,
-        emissiveIntensity: 0.5,
-        metalness: 0.35,
-        roughness: 0.15,
-        clearcoat: 1,
-        clearcoatRoughness: 0.1,
-        flatShading: true
-      });
-
-      mainMesh = new THREE.Mesh(
-        createCrystalGeometry(radius),
-        material
-      );
-
-      mainMesh.castShadow = true;
-      mainMesh.receiveShadow = true;
-
-      group.add(mainMesh);
-
-      const outline = new THREE.LineSegments(
-        new THREE.EdgesGeometry(mainMesh.geometry),
-        new THREE.LineBasicMaterial({
-          color: 0xffc16b,
-          transparent: true,
-          opacity: 0.8
-        })
-      );
-
-      group.add(outline);
-    }
-
-    // ---------------- ENERGY CORE ----------------
-
-    if (type === 'core') {
-
-      mainMesh = new THREE.Mesh(
-        new THREE.SphereGeometry(radius, 40, 40),
-        new THREE.MeshPhysicalMaterial({
-          color: 0xffb13b,
-          emissive: 0xff6500,
-          emissiveIntensity: 2,
-          metalness: 0.3,
-          roughness: 0.12,
-          clearcoat: 1
-        })
-      );
-
-      mainMesh.castShadow = true;
-
-      group.add(mainMesh);
-
-      // Inner energy shell
-      const shell = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(radius * 1.12, 1),
-        new THREE.MeshBasicMaterial({
-          color: 0xff8b20,
-          wireframe: true,
-          transparent: true,
-          opacity: 0.5
-        })
-      );
-
-      group.add(shell);
-
-      // Energy rings
-      const ring1 = new THREE.Mesh(
-        new THREE.TorusGeometry(radius * 1.4, 1.8, 8, 64),
-        new THREE.MeshBasicMaterial({
-          color: 0xffd07a
-        })
-      );
-
-      ring1.rotation.x = 0.7;
-
-      group.add(ring1);
-
-      const ring2 = new THREE.Mesh(
-        new THREE.TorusGeometry(radius * 1.7, 1.2, 8, 64),
-        new THREE.MeshBasicMaterial({
-          color: 0xff7b24
-        })
-      );
-
-      ring2.rotation.y = 1.1;
-
-      group.add(ring2);
-    }
-
-    // ---------------- COMMON GLOW ----------------
-
-    const glow = new THREE.Sprite(
-      new THREE.SpriteMaterial({
-        map: glowTexture,
-        color: type === 'crystal'
-          ? 0xffc080
-          : 0xff8a20,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-      })
-    );
-
-    glow.scale.set(
-      radius * 4.5,
-      radius * 4.5,
-      1
-    );
-
-    group.add(glow);
-
-    // Position object
     group.position.copy(screenToWorld(x, y));
 
     // Depth variation is kept (it used to be overwritten every frame)
@@ -498,9 +284,12 @@ export function createTelekinesisEngine(container, width, height) {
 
     scene.add(group);
 
+    // Cores spin slowly so their energy pattern stays readable
+    const spin = type === 'core' ? 0.35 : type === 'crystal' ? 0.7 : 1;
+
     const object = {
       group,
-      mainMesh,
+      visual,
       type,
       radius,
 
@@ -511,14 +300,18 @@ export function createTelekinesisEngine(container, width, height) {
       ),
 
       rotationSpeed: new THREE.Vector3(
-        Math.random() * 0.8,
-        Math.random() * 1.2,
-        Math.random() * 0.8
+        Math.random() * 0.8 * spin,
+        Math.random() * 1.2 * spin,
+        Math.random() * 0.8 * spin
       ),
 
       spinBoost: 1,
       baseZ,
       orbitRadius: 95 + objects.length % 3 * 48,
+
+      heat: 0,
+      portalUntil: 0,
+      shieldUntil: 0,
 
       phase: Math.random() * Math.PI * 2,
 
@@ -572,6 +365,8 @@ export function createTelekinesisEngine(container, width, height) {
 
   const handStates = new Map();   // handId -> state
   const holds = new Map();        // handId -> held object
+  const strokeStates = new Map(); // handId -> fingertip drawing state
+  const mandalaMeta = new Map();  // anchor handId -> { follow, lostAt }
 
   let shake = 0;
   let releaseFlash = 0;
@@ -734,6 +529,7 @@ export function createTelekinesisEngine(container, width, height) {
       object.velocity.z += (Math.random() - 0.5) * impulse * 0.15;
 
       object.spinBoost = 1 + energy * 5;
+      object.heat = 1;
     }
 
     effects.burst(centre, energy);
@@ -746,6 +542,52 @@ export function createTelekinesisEngine(container, width, height) {
     shake = Math.max(shake, 5 + 22 * energy);
 
     releaseFlash = 0.4 + 0.6 * energy;
+    releaseFlashPosition.copy(centre);
+  }
+
+  function openSlingPortal(event) {
+
+    const centre = screenToWorld(
+      event.center.x * width,
+      event.center.y * height
+    );
+
+    // The portal is larger than the drawn ring, like in the films
+    const radius = THREE.MathUtils.clamp(
+      event.radius * visibleHeight * 1.3,
+      TUNING.portalMinRadius,
+      TUNING.portalMaxRadius
+    );
+
+    effects.openPortal(centre, radius, event.direction);
+
+    shake = Math.max(shake, 6);
+    releaseFlash = Math.max(releaseFlash, 0.5);
+    releaseFlashPosition.copy(centre);
+  }
+
+  function openMandalaFromEvent(event) {
+
+    const anchorState = handStates.get(event.anchor.handId);
+
+    const follow = TUNING.mandalaAnchor === 'palm';
+
+    const centre = follow && anchorState
+      ? anchorState.palm.clone()
+      : screenToWorld(event.center.x * width, event.center.y * height);
+
+    const radius = THREE.MathUtils.clamp(
+      event.radius * visibleHeight * 1.5,
+      TUNING.mandalaMinRadius,
+      TUNING.mandalaMaxRadius
+    );
+
+    effects.openMandala(event.anchor.handId, centre, radius, event.direction);
+
+    mandalaMeta.set(event.anchor.handId, { follow, lostAt: 0 });
+
+    shake = Math.max(shake, 7);
+    releaseFlash = Math.max(releaseFlash, 0.6);
     releaseFlashPosition.copy(centre);
   }
 
@@ -765,6 +607,8 @@ export function createTelekinesisEngine(container, width, height) {
         state = {
           pinch: new THREE.Vector3(),
           palm: new THREE.Vector3(),
+          tip: new THREE.Vector3(),
+          pose: 'NONE',
           history: [],
           mode: 'IDLE',
           energy: 0,
@@ -782,6 +626,12 @@ export function createTelekinesisEngine(container, width, height) {
         screenToWorld(h.palm.x * width, h.palm.y * height)
       );
 
+      state.tip.copy(
+        screenToWorld(h.fingerTip.x * width, h.fingerTip.y * height)
+      );
+      state.tip.z = 45;
+
+      state.pose = h.pose;
       state.mode = h.mode;
       state.energy = h.energy;
       state.pinching =
@@ -795,6 +645,33 @@ export function createTelekinesisEngine(container, width, height) {
         time - state.history[0].t > 500
       ) {
         state.history.shift();
+      }
+    }
+
+    // Fingertip strokes (two-finger drawing)
+    if (frame.circles) {
+
+      for (const stroke of frame.circles.strokes) {
+
+        const position = screenToWorld(
+          stroke.tip.x * width,
+          stroke.tip.y * height
+        );
+
+        position.z = 40;
+
+        let state = strokeStates.get(stroke.handId);
+
+        if (!state) {
+          state = { pos: new THREE.Vector3(), power: 0, lastSeen: 0 };
+          strokeStates.set(stroke.handId, state);
+        }
+
+        state.pos.copy(position);
+        state.power = THREE.MathUtils.clamp(0.25 + stroke.speed * 0.8, 0.25, 1.15);
+        state.lastSeen = time;
+
+        effects.trailPoint(`stroke-${stroke.handId}`, position, time);
       }
     }
 
@@ -814,6 +691,14 @@ export function createTelekinesisEngine(container, width, height) {
           explode(event);
           break;
 
+        case 'CIRCLE_COMPLETE':
+          if (event.anchor && handStates.has(event.anchor.handId)) {
+            openMandalaFromEvent(event);
+          } else {
+            openSlingPortal(event);
+          }
+          break;
+
         case 'CHARGE_CANCEL': {
           const state = handStates.get(event.handId);
           if (state) effects.sparks(state.palm, 30, 0.8);
@@ -822,12 +707,48 @@ export function createTelekinesisEngine(container, width, height) {
       }
     }
 
+    for (const [id, state] of strokeStates) {
+      if (time - state.lastSeen > 600) strokeStates.delete(id);
+    }
+
     // Forget hands that disappeared (and are not holding anything)
     for (const [id, state] of handStates) {
       if (time - state.lastSeen > 900 && !holds.has(id)) {
         handStates.delete(id);
       }
     }
+  }
+
+  // How "energised" an object is: charged by a nearby fist, held, or called
+  function computeHeatTarget(object) {
+
+    const now = nowMs();
+    const p = object.group.position;
+
+    let target = object.heldBy !== null ? 0.65 : 0;
+
+    for (const state of handStates.values()) {
+
+      if (!handIsLive(state, now)) continue;
+
+      if (state.mode === 'CHARGING') {
+
+        const d = Math.hypot(p.x - state.palm.x, p.y - state.palm.y);
+        const closeness = 1 - Math.min(d / (TUNING.chargeRange * 1.1), 1);
+
+        target = Math.max(target, (0.2 + 0.8 * state.energy) * closeness);
+
+      } else if (state.pinching) {
+
+        const d = Math.hypot(p.x - state.pinch.x, p.y - state.pinch.y);
+
+        if (d < TUNING.assistRadius) {
+          target = Math.max(target, 0.35 * (1 - d / TUNING.assistRadius));
+        }
+      }
+    }
+
+    return target;
   }
 
   // ==============================================
@@ -955,6 +876,84 @@ export function createTelekinesisEngine(container, width, height) {
         }
       }
 
+      // ---------------- open portals draw objects in and fling them out ----------------
+      for (const portal of effects.getPortals()) {
+
+        if (portal.fade < 0.5) continue;
+
+        tmp.set(portal.x - position.x, portal.y - position.y, 0);
+
+        const distance = tmp.length();
+        const reach = portal.radius * 2.6;
+
+        if (distance < reach && distance > 1) {
+
+          tmp.normalize();
+
+          const k = 1 - distance / reach;
+
+          object.velocity.addScaledVector(tmp, TUNING.portalPull * k * dt);
+
+          tmp2.set(-tmp.y, tmp.x, 0);
+
+          object.velocity.addScaledVector(
+            tmp2,
+            TUNING.portalSwirl * portal.dir * k * dt
+          );
+        }
+
+        if (distance < portal.radius * 0.35 && now > object.portalUntil) {
+
+          const a = Math.random() * Math.PI * 2;
+
+          object.velocity.set(
+            Math.cos(a) * TUNING.portalEjectSpeed,
+            Math.sin(a) * TUNING.portalEjectSpeed,
+            0
+          );
+
+          object.heat = 1;
+          object.spinBoost = 4;
+          object.portalUntil = now + 1500;
+
+          effects.sparks(position, 40, 1.6);
+        }
+      }
+
+      // ---------------- mandala shield: objects bounce off it ----------------
+      for (const mandala of effects.getMandalas()) {
+
+        if (mandala.fade < 0.5) continue;
+
+        tmp.set(position.x - mandala.x, position.y - mandala.y, 0);
+
+        const distance = tmp.length();
+        const limit = mandala.radius + object.radius;
+
+        if (distance < limit && distance > 0.001) {
+
+          tmp.normalize();
+
+          const inward = object.velocity.dot(tmp);
+
+          // Reflect the inward part of the velocity (restitution 0.7)
+          if (inward < 0) {
+            object.velocity.addScaledVector(tmp, -inward * 1.7);
+          }
+
+          // Shove objects out of the shield (limited per frame, not a snap)
+          position.addScaledVector(tmp, Math.min(limit - distance, 900 * dt));
+
+          object.velocity.addScaledVector(tmp, 160 * dt);
+
+          if (now > object.shieldUntil) {
+            effects.sparks(position, 16, 1.2);
+            object.heat = 1;
+            object.shieldUntil = now + 250;
+          }
+        }
+      }
+
       // Natural floating force
       object.velocity.y +=
         Math.sin(time * 0.001 + object.phase) *
@@ -1048,6 +1047,68 @@ export function createTelekinesisEngine(container, width, height) {
       }
     }
 
+    // ---------------- mandala upkeep ----------------
+    for (const mandala of effects.getMandalas()) {
+
+      const meta = mandalaMeta.get(mandala.key) || { follow: true, lostAt: 0 };
+      const anchor = handStates.get(mandala.key);
+
+      const anchorOk =
+        anchor && handIsLive(anchor, now) && anchor.pose === 'OPEN';
+
+      if (anchorOk) {
+
+        meta.lostAt = 0;
+
+        if (meta.follow) effects.moveMandala(mandala.key, anchor.palm);
+
+      } else {
+
+        if (!meta.lostAt) meta.lostAt = now;
+
+        if (now - meta.lostAt > TUNING.mandalaLostMs) {
+          effects.closeMandala(mandala.key);
+        }
+      }
+
+      mandalaMeta.set(mandala.key, meta);
+
+      // Rays from the other hand's two fingers to the mandala
+      let tip = null;
+
+      for (const [id, state] of handStates) {
+
+        if (id === mandala.key) continue;
+        if (!handIsLive(state, now)) continue;
+
+        if (state.pose === 'TWO_FINGERS') {
+          tip = state.tip;
+          break;
+        }
+      }
+
+      effects.setBeams(mandala.key, tip);
+
+      // The mandala lights the scene
+      if (mandala.fade > 0.5 && strongest < 0.7) {
+        strongest = 0.7;
+        lightPosition.set(mandala.x, mandala.y, 0);
+      }
+    }
+
+    // Embers shed by the fingertip while drawing a circle
+    for (const [id, state] of strokeStates) {
+
+      if (now - state.lastSeen > 200) continue;
+
+      effects.sparkTrail(`stroke-${id}`, state.pos, state.power, dt);
+
+      if (state.power > strongest) {
+        strongest = state.power * 0.8;
+        lightPosition.copy(state.pos);
+      }
+    }
+
     lightTarget = strongest * 380;
 
     handLight.intensity +=
@@ -1117,13 +1178,25 @@ export function createTelekinesisEngine(container, width, height) {
           object.baseZ + Math.sin(object.phase * 1.4) * 12;
       }
 
-      // Core glow intensity animation
-      if (object.type === 'core') {
+      // Heat follows the hand quickly when rising and cools slowly
+      const heatTarget = computeHeatTarget(object);
 
-        const pulse =
-          1.6 + Math.sin(now * 0.004 + object.phase) * 0.4;
+      object.heat +=
+        (heatTarget - object.heat) *
+        (1 - Math.exp(-(heatTarget > object.heat ? 8 : 2.2) * dt));
 
-        object.mainMesh.material.emissiveIntensity = pulse;
+      object.visual.update(dt, now * 0.001, object.heat);
+
+      // Subtle fire around energy cores
+      if (object.type === 'core' && TUNING.coreFlamePower > 0) {
+
+        effects.flame(
+          `core-${group.id}`,
+          group.position,
+          TUNING.coreFlamePower * (1 + object.heat),
+          dt,
+          object.radius * 0.7
+        );
       }
 
       // Fast objects leave a thin spark trail
@@ -1172,6 +1245,7 @@ export function createTelekinesisEngine(container, width, height) {
     cancelAnimationFrame(animationId);
 
     effects.dispose();
+    factory.dispose();
 
     scene.traverse((child) => {
 
@@ -1203,6 +1277,8 @@ export function createTelekinesisEngine(container, width, height) {
 
     handStates.clear();
     holds.clear();
+    strokeStates.clear();
+    mandalaMeta.clear();
     objects.length = 0;
   }
 

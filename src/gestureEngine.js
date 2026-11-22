@@ -86,7 +86,9 @@ export function getGestureName(gesture) {
     CHARGING: 'CHARGING',
     RELEASE: 'RELEASE',
     GRAB: 'GRAB',
-    SNAP: 'SNAP'
+    SNAP: 'SNAP',
+    SPELL_DRAW: 'DRAWING',
+    PORTAL: 'PORTAL'
   };
 
   return names[gesture] || 'NO GESTURE';
@@ -106,7 +108,9 @@ export function getSpellName(gesture) {
     CHARGING: 'ENERGY HOLD',
     RELEASE: 'ENERGY RELEASE',
     GRAB: 'OBJECT CONTROL',
-    SNAP: 'DESTRUCTION'
+    SNAP: 'DESTRUCTION',
+    SPELL_DRAW: 'SLING RING',
+    PORTAL: 'PORTAL'
   };
 
   return spells[gesture] || 'NONE';
@@ -316,7 +320,8 @@ export function createGestureTracker(overrides = {}) {
       grabbing: false,
       analysis: null,
       palm: { x: 0, y: 0 },
-      pinchPoint: { x: 0, y: 0 }
+      pinchPoint: { x: 0, y: 0 },
+      fingerTip: { x: 0, y: 0 }
     };
   }
 
@@ -584,6 +589,10 @@ export function createGestureTracker(overrides = {}) {
         x: (det.lm[4].x + det.lm[8].x) / 2,
         y: (det.lm[4].y + det.lm[8].y) / 2
       };
+      track.fingerTip = {
+        x: (det.lm[8].x + det.lm[12].x) / 2,
+        y: (det.lm[8].y + det.lm[12].y) / 2
+      };
 
       // World landmarks (metres) are the most scale-invariant input
       const analysis = det.world
@@ -611,6 +620,7 @@ export function createGestureTracker(overrides = {}) {
         contact: track.contact,
         palm: { ...track.palm },
         pinchPoint: { ...track.pinchPoint },
+        fingerTip: { ...track.fingerTip },
         analysis: track.analysis,
         ui: uiStateOf(track)
       });
