@@ -1234,6 +1234,26 @@ export function createTelekinesisEngine(container, width, height) {
 
   animate(lastFrame);
 
+  // Let go of everything (used when system-control mode takes over the hands)
+  function releaseAll() {
+
+    for (const object of holds.values()) {
+      object.velocity.set(0, 0, 0);
+      object.heldBy = null;
+      object.grabbed = false;
+    }
+
+    holds.clear();
+
+    for (const mandala of effects.getMandalas()) {
+      effects.closeMandala(mandala.key);
+    }
+
+    mandalaMeta.clear();
+    strokeStates.clear();
+    handStates.clear();
+  }
+
   // ==============================================
   // CLEANUP
   // ==============================================
@@ -1284,6 +1304,7 @@ export function createTelekinesisEngine(container, width, height) {
 
   return {
     update,
+    releaseAll,
     dispose
   };
 }
