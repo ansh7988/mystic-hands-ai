@@ -1,12 +1,14 @@
 import {
   FilesetResolver,
-  HandLandmarker
+  HandLandmarker,
+  ImageSegmenter
 } from '@mediapipe/tasks-vision';
 
 import { drawMagicEffect } from './magicEngine.js';
 import { createTelekinesisEngine } from './telekinesis.js';
 import { createGestureTracker } from './gestureEngine.js';
 import { createCircleDetector } from './circleDetector.js';
+import { createSnapDetector } from './snapDetector.js';
 
 // ==========================================
 // HAND CONNECTIONS
@@ -20,6 +22,44 @@ const HAND_CONNECTIONS = [
   [13,17],[17,18],[18,19],[19,20],
   [0,17]
 ];
+
+// ==========================================
+// PERSON SEGMENTER (for the snap: you turn to dust)
+// Needs public/models/selfie_segmenter.tflite. Without it the snap still
+// destroys the floating objects, but you do not disappear.
+// ==========================================
+
+async function createPersonSegmenter(vision) {
+
+  const make = (delegate) => ImageSegmenter.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: '/models/selfie_segmenter.tflite',
+      delegate
+    },
+    runningMode: 'VIDEO',
+    outputConfidenceMasks: true,
+    outputCategoryMask: false
+  });
+
+  try {
+    const segmenter = await make('GPU');
+    console.log('Person segmenter ready (GPU requested).');
+    return segmenter;
+  } catch (gpuError) {
+    try {
+      const segmenter = await make('CPU');
+      console.log('Person segmenter ready (CPU).');
+      return segmenter;
+    } catch (error) {
+      console.warn(
+        'Person segmenter unavailable - the snap will not hide you. ' +
+        'Put selfie_segmenter.tflite into public/models/. ',
+        error
+      );
+      return null;
+    }
+  }
+}
 
 // ==========================================
 // MAIN HAND TRACKING FUNCTION
@@ -110,6 +150,12 @@ export async function startHandTracking(
   }
 
   // ========================================
+  // PERSON SEGMENTER
+  // ========================================
+
+  const segmenter = await createPersonSegmenter(vision);
+
+  // ========================================
   // CANVAS CONFIGURATION
   // ========================================
 
@@ -137,12 +183,16 @@ export async function startHandTracking(
     telekinesis = createTelekinesisEngine(
       canvas.parentElement,
       video.videoWidth,
-      video.videoHeight
+      video.videoHeight,
+      video
     );
+
+    telekinesis.attachSegmenter(segmenter);
 
   } catch (error) {
 
     handLandmarker.close();
+    if (segmenter) segmenter.close();
     throw error;
   }
 
@@ -153,7 +203,10 @@ export async function startHandTracking(
   const aspect = video.videoWidth / video.videoHeight;
   const gestureTracker = createGestureTracker();
   const circleDetector = createCircleDetector();
+  const snapDetector = createSnapDetector();
   const onGestureEvent = options.onGestureEvent || null;
+  const isInputBlocked = options.isInputBlocked || (() => false);
+  const EMPTY_FRAME = { hands: [], events: [], circles: null };
 
   // ========================================
   // TRACKING VARIABLES
@@ -327,7 +380,31 @@ export async function startHandTracking(
           }
         }
 
-        if (onGestureEvent) {
+        // While system-control mode owns the hands, the magic stays quiet
+        const blocked = isInputBlocked();
+
+        // ==================================
+        // FINGER SNAP (thumb + middle finger)
+        // ==================================
+
+        if (!blocked) {
+
+          const snapFrame = snapDetector.update(
+            gestureFrame.hands,
+            currentTime
+          );
+
+          for (const snapEvent of snapFrame.events) {
+            snapEvent.personEffect = !!segmenter;
+            gestureFrame.events.push(snapEvent);
+          }
+
+          if (snapFrame.recent) {
+            gestureFrame.ui.gesture = 'SNAP';
+          }
+        }
+
+        if (onGestureEvent && !blocked) {
           for (const event of gestureFrame.events) {
             onGestureEvent(event);
           }
@@ -341,7 +418,7 @@ export async function startHandTracking(
         telekinesis.update(
           hands,
           currentTime,
-          gestureFrame
+          blocked ? EMPTY_FRAME : gestureFrame
         );
 
         // ==================================
@@ -371,7 +448,7 @@ export async function startHandTracking(
   // CLEANUP FUNCTION
   // ========================================
 
-  return function stopTracking() {
+  function stopTracking() {
 
     running = false;
 
@@ -386,6 +463,7 @@ export async function startHandTracking(
 
     gestureTracker.reset();
     circleDetector.reset();
+    snapDetector.reset();
 
     // Dispose 3D engine
     telekinesis.dispose();
@@ -393,8 +471,15 @@ export async function startHandTracking(
     // Close MediaPipe
     handLandmarker.close();
 
+    if (segmenter) segmenter.close();
+
     console.log(
       'MYSTIC HANDS AI tracking stopped.'
     );
-  };
+  }
+
+  // main.js calls this when system-control mode switches on
+  stopTracking.releaseInteractions = () => telekinesis.releaseAll();
+
+  return stopTracking;
 }

@@ -1,6 +1,8 @@
 import './style.css';
 
 import { startHandTracking } from './handTracking.js';
+import { createSystemBridge } from './systemBridge.js';
+import { createSystemControl } from './systemControl.js';
 
 import {
   getGestureName,
@@ -120,6 +122,17 @@ document.querySelector('#app').innerHTML = `
         </div>
 
         <div class="info-card">
+          <p class="card-label">SYSTEM CONTROL</p>
+          <h2 id="sys-status" class="pending">OFF</h2>
+          <p id="sys-detail">Mouse, volume and brightness by hand</p>
+          <input id="sys-token" type="password" autocomplete="off"
+            placeholder="Helper token"
+            style="width:100%;margin-top:12px;padding:8px 10px;font-size:11px;color:#f2e6d6;background:#0c0c10;border:1px solid #59412b;border-radius:6px;">
+          <button id="sys-toggle" class="secondary-btn"
+            style="margin-top:10px;width:100%;">ENABLE (C)</button>
+        </div>
+
+        <div class="info-card">
           <p class="card-label">SYSTEM MODULES</p>
 
           <ul class="module-list">
@@ -169,6 +182,11 @@ const telekinesisStatus = document.querySelector('#telekinesis-status');
 
 const modules = document.querySelectorAll('.module-list li');
 
+const sysStatus = document.querySelector('#sys-status');
+const sysDetail = document.querySelector('#sys-detail');
+const sysToken = document.querySelector('#sys-token');
+const sysToggle = document.querySelector('#sys-toggle');
+
 // =====================================
 // APPLICATION VARIABLES
 // =====================================
@@ -217,10 +235,126 @@ function resetScreenFit() {
 }
 
 // =====================================
+// SYSTEM CONTROL (mouse / volume / brightness via the local helper)
+// =====================================
+
+let systemEnabled = false;
+let lastSystemHud = null;
+
+const systemBridge = createSystemBridge({
+  onChange: () => renderSystem()
+});
+
+const systemControl = createSystemControl(
+  {},
+  () => systemBridge.getState()
+);
+
+try {
+  sysToken.value = localStorage.getItem('mystic.helperToken') || '';
+} catch {
+  // storage not available: the token is simply typed each time
+}
+
+function renderSystem() {
+
+  const status = systemBridge.status();
+
+  sysToggle.textContent = systemEnabled ? 'DISABLE (C / Esc)' : 'ENABLE (C)';
+
+  if (!systemEnabled) {
+
+    sysStatus.textContent = 'OFF';
+    sysStatus.classList.remove('online');
+    sysStatus.classList.add('pending');
+
+    sysDetail.textContent = status.error || 'Mouse, volume and brightness by hand';
+
+    return;
+  }
+
+  if (!status.authed) {
+
+    sysStatus.textContent = 'CONNECTING';
+    sysStatus.classList.remove('online');
+    sysStatus.classList.add('pending');
+
+    sysDetail.textContent = status.error || 'Connecting to the helper...';
+
+    return;
+  }
+
+  sysStatus.textContent = 'ACTIVE';
+  sysStatus.classList.remove('pending');
+  sysStatus.classList.add('online');
+
+  const hud = lastSystemHud;
+
+  if (hud && hud.active) {
+
+    const level = hud.dialLevel ?? hud[hud.dial];
+
+    const levelText = typeof level === 'number'
+      ? `${Math.round(level)}%`
+      : '--';
+
+    sysDetail.textContent =
+      `${hud.cursorMode} | ${hud.dial.toUpperCase()} ${levelText}` +
+      (hud.muted ? ' (muted)' : '');
+
+  } else {
+
+    sysDetail.textContent = 'Point with your index finger to move the mouse';
+  }
+}
+
+function setSystemEnabled(on) {
+
+  if (on === systemEnabled) return;
+
+  if (on) {
+
+    const token = sysToken.value.trim();
+
+    if (!token) {
+      sysDetail.textContent = 'Paste the helper token first';
+      return;
+    }
+
+    try {
+      localStorage.setItem('mystic.helperToken', token);
+    } catch {
+      // ignore
+    }
+
+    systemBridge.connect(token);
+  }
+
+  // Turning off: release any held mouse button BEFORE disconnecting
+  const release = systemControl.setEnabled(on, performance.now());
+
+  release.forEach((command) => systemBridge.send(command));
+
+  if (!on) systemBridge.disconnect();
+
+  systemEnabled = on;
+
+  // The magic hands off / on: let go of anything held in the 3D scene
+  if (stopTracking && stopTracking.releaseInteractions) {
+    stopTracking.releaseInteractions();
+  }
+
+  renderSystem();
+}
+
+sysToggle.addEventListener('click', () => setSystemEnabled(!systemEnabled));
+
+// =====================================
 // GESTURE EVENT FEEDBACK + DEBUG HUD
 // (press D to toggle the debug panel)
 // =====================================
 
+let lastSystemRender = 0;
 let lastEventText = '';
 let lastEventTime = 0;
 
@@ -240,6 +374,12 @@ function handleGestureEvent(event) {
       lastEventText =
         `ENERGY RELEASED ${Math.round(event.energy * 100)}%` +
         (event.hands > 1 ? ' (both hands)' : '');
+      break;
+
+    case 'SNAP':
+      lastEventText = event.personEffect
+        ? 'SNAP - reality turns to dust'
+        : 'SNAP (add selfie_segmenter.tflite to public/models to vanish yourself)';
       break;
 
     case 'CIRCLE_START':
@@ -304,9 +444,23 @@ window.addEventListener('keydown', (event) => {
 
   if (event.ctrlKey || event.metaKey || event.altKey) return;
 
-  if (event.key.toLowerCase() === 'd') {
+  // Typing in the token box must never trigger shortcuts
+  if (event.target && event.target.tagName === 'INPUT') return;
+
+  const key = event.key.toLowerCase();
+
+  if (key === 'd') {
     hudVisible = !hudVisible;
     hud.style.display = hudVisible ? 'block' : 'none';
+  }
+
+  if (key === 'c') {
+    setSystemEnabled(!systemEnabled);
+  }
+
+  // Kill switch
+  if (event.key === 'Escape') {
+    setSystemEnabled(false);
   }
 });
 
@@ -430,6 +584,31 @@ async function startCamera() {
         setHandCount(hands.length);
         updateHud(frame, now);
 
+        // ---------- system control (runs even with no hands, to release buttons) ----------
+        if (systemEnabled && systemBridge.status().authed) {
+
+          const result = systemControl.update(frame, now);
+
+          for (const command of result.commands) {
+            systemBridge.send(command);
+          }
+
+          lastSystemHud = result.hud;
+
+          // Hands away for a long time: switch control off for safety
+          if (
+            result.hud.active &&
+            result.hud.idleMs > result.hud.idleDisableMs
+          ) {
+            setSystemEnabled(false);
+          }
+
+          if (now - lastSystemRender > 120) {
+            lastSystemRender = now;
+            renderSystem();
+          }
+        }
+
         if (hands.length === 0) {
 
           setText(activeGesture, 'NONE');
@@ -441,6 +620,18 @@ async function startCamera() {
           );
 
           setModule(3, false);
+
+          return;
+        }
+
+        if (systemEnabled) {
+
+          const hudNow = lastSystemHud;
+
+          setText(activeGesture, hudNow ? hudNow.cursorMode : 'CONTROL');
+          setText(activeSpell, 'SYSTEM CONTROL');
+          setText(cameraMessage, 'System control is on. Press Esc to stop.');
+          setModule(3, true);
 
           return;
         }
@@ -473,7 +664,8 @@ async function startCamera() {
         }
       },
       {
-        onGestureEvent: handleGestureEvent
+        onGestureEvent: handleGestureEvent,
+        isInputBlocked: () => systemEnabled
       }
     );
 
@@ -503,6 +695,10 @@ async function startCamera() {
 // =====================================
 
 function stopCamera() {
+
+  if (systemEnabled) {
+    setSystemEnabled(false);
+  }
 
   if (stopTracking) {
 

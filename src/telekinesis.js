@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createMagicEffects } from './magicEffects.js';
 import { createObjectFactory } from './objectFactory.js';
+import { createThanosSnap } from './thanosSnap.js';
 
 // ================================================
 // MYSTIC HANDS AI - TELEKINESIS
@@ -11,6 +12,7 @@ import { createObjectFactory } from './objectFactory.js';
 //   OPEN   (RELEASE event)          -> radial explosion impulse
 //   TWO FINGERS drawing a circle    -> glowing trail + sparks, then a portal
 //   OPEN PALM + other hand's circle -> mandala shield with a fan of rays
+//   SNAP (thumb + middle finger)    -> you and every object turn to dust
 //
 // Object visuals (rocks, crystals, cores) come from objectFactory.js.
 // ================================================
@@ -53,7 +55,7 @@ const TUNING = {
   coreFlamePower: 0.28
 };
 
-export function createTelekinesisEngine(container, width, height) {
+export function createTelekinesisEngine(container, width, height, video = null) {
 
   container.style.position = 'relative';
   container.style.overflow = 'hidden';
@@ -202,6 +204,17 @@ export function createTelekinesisEngine(container, width, height) {
     effects.setViewport(buffer.y, camera.fov);
   }
 
+  // Thanos snap: person + objects crumble to dust (needs the camera video)
+  const thanos = video
+    ? createThanosSnap({ scene, video, width, height, visibleWidth, visibleHeight })
+    : null;
+
+  if (thanos) {
+    const buffer = new THREE.Vector2();
+    renderer.getDrawingBufferSize(buffer);
+    thanos.setViewport(buffer.y, camera.fov);
+  }
+
   // ==============================================
   // GLOW TEXTURE
   // ==============================================
@@ -311,6 +324,8 @@ export function createTelekinesisEngine(container, width, height) {
 
       heat: 0,
       portalUntil: 0,
+      dead: false,
+      appear: 1,
       shieldUntil: 0,
 
       phase: Math.random() * Math.PI * 2,
@@ -423,7 +438,7 @@ export function createTelekinesisEngine(container, width, height) {
 
     for (const object of objects) {
 
-      if (object.heldBy !== null) continue;
+      if (object.heldBy !== null || object.dead) continue;
 
       const dx = object.group.position.x - state.pinch.x;
       const dy = object.group.position.y - state.pinch.y;
@@ -502,7 +517,7 @@ export function createTelekinesisEngine(container, width, height) {
 
     for (const object of objects) {
 
-      if (object.heldBy !== null) continue;
+      if (object.heldBy !== null || object.dead) continue;
 
       const position = object.group.position;
 
@@ -592,10 +607,105 @@ export function createTelekinesisEngine(container, width, height) {
   }
 
   // ==============================================
+  // THANOS SNAP
+  // ==============================================
+
+  const DUST_COLOR = {
+    rock: [0.26, 0.21, 0.18],
+    crystal: [0.95, 0.55, 0.18],
+    core: [1.0, 0.5, 0.15]
+  };
+
+  function vanishObject(object) {
+
+    for (const [id, held] of holds) {
+      if (held === object) holds.delete(id);
+    }
+
+    object.heldBy = null;
+    object.grabbed = false;
+
+    const position = object.group.position;
+
+    if (thanos) {
+      thanos.emitDust(
+        position,
+        110,
+        object.radius * 1.2,
+        DUST_COLOR[object.type] || DUST_COLOR.rock
+      );
+    }
+
+    effects.sparks(position, 24, 1.2);
+
+    object.velocity.set(0, 0, 0);
+    object.group.visible = false;
+    object.dead = true;
+  }
+
+  function reviveObject(object) {
+
+    object.dead = false;
+    object.appear = 0;
+
+    object.group.visible = true;
+    object.group.scale.setScalar(0.001);
+
+    effects.sparks(object.group.position, 18, 0.9);
+  }
+
+  // Objects go (and come back) when the sweep reaches them
+  function updateSnapObjects() {
+
+    const state = thanos.getState();
+    const progress = thanos.getProgress();
+
+    for (const object of objects) {
+
+      const p = object.group.position;
+      const d = thanos.dissolveAtWorld(p.x, p.y);
+
+      if ((state === 'DISSOLVING' || state === 'HOLD') && !object.dead && progress > d) {
+        vanishObject(object);
+      } else if (state === 'RESTORING' && object.dead && progress < d) {
+        reviveObject(object);
+      } else if (state === 'IDLE' && object.dead) {
+        reviveObject(object);
+      }
+    }
+  }
+
+  function snapStrike(event) {
+
+    const centre = screenToWorld(
+      event.position.x * width,
+      event.position.y * height
+    );
+
+    shake = Math.max(shake, 26);
+
+    releaseFlash = 1;
+    releaseFlashPosition.copy(centre);
+
+    effects.ring(centre, 520, 0.8);
+    effects.burst(centre, 0.7);
+
+    // Everything shudders before the dust takes it
+    for (const object of objects) {
+      object.heat = 1;
+      object.spinBoost = 6;
+    }
+
+    if (thanos) thanos.toggle(nowMs());
+  }
+
+  // ==============================================
   // PUBLIC UPDATE - CALLED BY handTracking.js
   // ==============================================
 
   function update(hands, time = nowMs(), frame = null) {
+
+    if (thanos) thanos.processFrame(time);
 
     if (!frame) return;
 
@@ -691,6 +801,10 @@ export function createTelekinesisEngine(container, width, height) {
           explode(event);
           break;
 
+        case 'SNAP':
+          snapStrike(event);
+          break;
+
         case 'CIRCLE_COMPLETE':
           if (event.anchor && handStates.has(event.anchor.handId)) {
             openMandalaFromEvent(event);
@@ -775,6 +889,8 @@ export function createTelekinesisEngine(container, width, height) {
     }
 
     for (const object of objects) {
+
+      if (object.dead) continue;
 
       const position = object.group.position;
 
@@ -1154,9 +1270,35 @@ export function createTelekinesisEngine(container, width, height) {
 
     updatePhysics(dt, now);
 
+    if (thanos) {
+      thanos.update(dt, now);
+      updateSnapObjects();
+    }
+
     for (const object of objects) {
 
       const group = object.group;
+
+      if (object.dead) continue;
+
+      // Objects pop back in (after the snap is undone)
+      if (object.appear < 1) {
+
+        object.appear = Math.min(1, object.appear + dt / 0.7);
+
+        const c1 = 1.70158;
+        const c3 = c1 + 1;
+        const k = object.appear - 1;
+
+        group.scale.setScalar(
+          Math.max(0.001, 1 + c3 * k * k * k + c1 * k * k)
+        );
+      }
+
+      // They tremble while the sweep is on its way
+      if (thanos && thanos.getState() === 'DISSOLVING') {
+        group.rotation.z += (Math.random() - 0.5) * 0.14;
+      }
 
       group.rotation.x +=
         object.rotationSpeed.x * object.spinBoost * dt;
@@ -1264,6 +1406,7 @@ export function createTelekinesisEngine(container, width, height) {
 
     cancelAnimationFrame(animationId);
 
+    if (thanos) thanos.dispose();
     effects.dispose();
     factory.dispose();
 
@@ -1305,6 +1448,9 @@ export function createTelekinesisEngine(container, width, height) {
   return {
     update,
     releaseAll,
+    attachSegmenter: (instance) => {
+      if (thanos) thanos.attachSegmenter(instance);
+    },
     dispose
   };
 }

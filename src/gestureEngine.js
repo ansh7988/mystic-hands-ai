@@ -321,7 +321,9 @@ export function createGestureTracker(overrides = {}) {
       analysis: null,
       palm: { x: 0, y: 0 },
       pinchPoint: { x: 0, y: 0 },
-      fingerTip: { x: 0, y: 0 }
+      fingerTip: { x: 0, y: 0 },
+      indexTip: { x: 0, y: 0 },
+      indexBase: { x: 0, y: 0 }
     };
   }
 
@@ -593,6 +595,8 @@ export function createGestureTracker(overrides = {}) {
         x: (det.lm[8].x + det.lm[12].x) / 2,
         y: (det.lm[8].y + det.lm[12].y) / 2
       };
+      track.indexTip = { x: det.lm[8].x, y: det.lm[8].y };
+      track.indexBase = { x: det.lm[5].x, y: det.lm[5].y };
 
       // World landmarks (metres) are the most scale-invariant input
       const analysis = det.world
@@ -621,6 +625,8 @@ export function createGestureTracker(overrides = {}) {
         palm: { ...track.palm },
         pinchPoint: { ...track.pinchPoint },
         fingerTip: { ...track.fingerTip },
+        indexTip: { ...track.indexTip },
+        indexBase: { ...track.indexBase },
         analysis: track.analysis,
         ui: uiStateOf(track)
       });
