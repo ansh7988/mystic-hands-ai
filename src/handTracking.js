@@ -85,10 +85,10 @@ export async function startHandTracking(
   // MEDIAPIPE VISION INITIALIZATION
   // ========================================
 
-  // NOTE: pin this URL to your installed @mediapipe/tasks-vision version
-  // once package.json lists it (Milestone 8).
+  // Pinned to the installed package version (npm ls: 1.2.3) so the wasm
+  // files always match the JavaScript. Change both together when upgrading.
   const vision = await FilesetResolver.forVisionTasks(
-    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.3/wasm'
   );
 
   // ========================================
